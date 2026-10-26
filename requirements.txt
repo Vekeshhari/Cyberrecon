@@ -8,7 +8,7 @@ flask>=2.3.0
 requests>=2.34.2
 
 # === Images + QR Encoding ===
-pillow>=12.3.0
+pillow>=13.0.0
 qrcode[pil]>=8.2
 
 # === QR Decoding (client) ===
