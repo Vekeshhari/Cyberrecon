@@ -1,0 +1,100 @@
+@startwbs
+skinparam monochrome true
+title CyberRecon — Attack Tree (Defensive Detection, v3.5)
+
+* Detect CyberRecon Deployment
+
+** Network-Layer Signals
+*** Repeated POST to /exfil/* every N seconds
+**** Indicator: beaconing pattern
+**** Action: threshold alert at 3+ posts/min
+*** HTTPS to unknown IP on port 8443
+**** Indicator: non-standard port
+**** Action: outbound allowlist review
+*** Self-signed certificate on the C2 endpoint
+**** Indicator: SNI/CN mismatch, no public CA chain
+**** Action: TLS inspection + JA3 fingerprinting
+*** Chrome process connecting to same IP as Python process
+**** Indicator: STRONG
+**** Action: process-tree correlation
+
+** Auth-Layer Signals (v3.5)
+*** Dashboard login brute force
+**** Indicator: multiple 401 from /login
+**** Action: alert at 5+ failures/min/IP
+*** Session cookie reuse across User-Agent changes
+**** Indicator: cookie hijack attempt
+**** Action: invalidate session on UA mismatch
+*** Victim key replay from different source IP
+**** Indicator: same X-Victim-Key, new origin
+**** Action: flag victim, rotate key
+*** Rapid /register calls from same IP
+**** Indicator: rate-limit hit (429s)
+**** Action: alert + IP block if persistent
+
+** Crypto-Layer Signals (v3.5)
+*** QR PNGs contain encrypted base64
+**** Indicator: no visible JSON structure
+**** Action: entropy baseline on first QR fetch
+*** Repeated QR requests with identical cache-buster
+**** Indicator: automated polling loop
+**** Action: fingerprint ?t=<epoch_ms> pattern
+*** AES key extracted from .exe
+**** Indicator: 44-char base64url strings
+**** Action: static-analysis signature
+
+** Host-Layer Signals (Windows)
+*** Registry Run key: HKCU\...\Run\WindowsSecurityUpdate
+**** Indicator: persistence (T1547.001)
+**** Action: Sysmon Event 13 rule
+*** RunMRU / RecentDocs containing "CyberRecon"
+**** Indicator: app launch history
+**** Action: hunt for these strings
+*** Detached cmd.exe spawning .bat in %TEMP%
+**** Indicator: STRONG (v3.5 anti-forensics)
+**** Action: Sysmon Event 1 with parent=python
+*** .bat named _cr_*.bat or _cyberrecon*
+**** Indicator: cleanup script signature
+**** Action: honeypot trap on file creation
+*** wevtutil cl Security / System
+**** Indicator: log tampering (T1070.001)
+**** Action: Sysmon Event 1 + Windows Event 1102
+*** Payload binary disappears after <5 seconds
+**** Indicator: self-delete anti-forensics
+**** Action: memory carve + file create/delete telemetry
+
+** Application-Layer Signals
+*** Chrome with --headless=new
+**** Indicator: non-default CLI flags
+**** Action: command-line telemetry rule
+*** Chrome with --use-fake-ui-for-media-stream
+**** Indicator: media auto-grant
+**** Action: alert on fake-media flags
+*** Chrome with --ignore-certificate-errors
+**** Indicator: (v3.5) accepts self-signed C2 cert
+**** Action: alert in prod environments
+*** OpenCV QRCodeDetector load in Python
+**** Indicator: behavioural anomaly
+**** Action: import-time telemetry
+*** Selenium scoped_dir* profiles in %TEMP%
+**** Indicator: headless automation
+**** Action: file creation hunt in %TEMP%
+*** Sandbox writes under %USERPROFILE%\CyberReconSandbox
+**** Indicator: (v3.5) app-specific sandbox
+**** Action: file-write alert on this path
+
+** Data-Layer Signals
+*** Large base64-encoded POSTs
+**** Indicator: DLP signature
+**** Action: threshold at >100 KB POST body
+*** Repeated clipboard reads without user action
+**** Indicator: unusual
+**** Action: hook clipboard API
+*** Webcam / screenshot access without user interaction
+**** Indicator: privacy violation
+**** Action: OS-level media audit
+*** Command output in HTTP bodies with keys "screenshot", "webcam", "keystrokes"
+**** Indicator: (v3.5) structured exfil
+**** Action: DLP regex for keywords
+
+@endwbs

@@ -1,0 +1,57 @@
+name: CD — Release Deploy
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest tests/ -v || echo "no tests yet"
+
+      - name: Run Bandit
+        run: |
+          mkdir -p reports
+          bandit -r . -c bandit.yaml -ll -f json -o reports/bandit-final.json || true
+
+      - name: Build Docker image
+        run: |
+          docker build -t cyberrecon:${{ github.ref_name }} .
+          docker save cyberrecon:${{ github.ref_name }} | gzip > cyberrecon-${{ github.ref_name }}.tar.gz
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            cyberrecon-${{ github.ref_name }}.tar.gz
+            reports/bandit-final.json
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+
+          

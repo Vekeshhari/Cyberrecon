@@ -1,0 +1,96 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam rectangle {
+  BackgroundColor White
+  BorderColor Black
+}
+skinparam componentStyle rectangle
+
+title CyberRecon — DFD Level 0 (Context Diagram with Trust Boundaries, v3.5)
+
+' =====================
+' External entities
+' =====================
+rectangle "Operator\n(Authorized Researcher)" as OP <<external>>
+rectangle "Victim Host\n(Compromised Windows VM)" as VH <<external>>
+rectangle "Google Chrome\n(headless browser)" as CH <<external>>
+rectangle "Defender\n(Blue team / IOC consumer)" as DF <<external>>
+
+' =====================
+' Trust Boundary 1: Untrusted Network
+' =====================
+rectangle "UNTRUSTED NETWORK\n(LAN / public internet)" as NET #line:red;line.dashed {
+}
+
+' =====================
+' Trust Boundary 2: Server Zone
+' =====================
+rectangle "TRUSTED SERVER ZONE" as SERVERZONE #line:red;line.dashed {
+
+  rectangle "0\nCyberRecon C2 Framework" as SYSTEM {
+    rectangle "QR-Code-Based\nC2 System" as CORE #line:black;line.dashed
+
+    ' Auth gateways sit ON the boundary
+    rectangle "Auth Gateway\n- Dashboard login\n- Operator token\n- Victim key" as AUTH #line:red;line.bold
+
+    note bottom of CORE
+      v3.5 hardening:
+      - Dashboard session login
+      - X-Victim-Key auth
+      - AES-256-GCM QR payloads
+      - /self_destruct_notify
+      - Rate limiting
+    end note
+  }
+
+  database "Victim Store\n(in-memory dict)" as DS1
+  database "Session Store\n(Flask session)" as DS2
+}
+
+' =====================
+' Data flows — crossing trust boundaries
+' =====================
+
+' Operator → Authenticated (crosses boundary via login+token)
+OP --> AUTH : password\n(login)\nX-Operator-Token
+AUTH --> OP : session_cookie\ncommand_status\nvictim_list\nexfil_data\nZIP_archive
+
+' Victim → Authenticated (crosses boundary via X-Victim-Key)
+VH --> AUTH : X-Victim-Key\nvictim_registration\nexfil_payload\nack\nself_destruct_notify
+AUTH --> VH : QR_PNG (AES-256-GCM)\nheartbeat or command
+
+' Chrome renders QR (still untrusted)
+CH --> AUTH : GET /qr/<id>?vkey=...
+AUTH --> CH : QR_PNG
+
+' Defender reads IOCs (no crossing)
+DF -.-> SYSTEM : reads published IOCs
+
+' Internal flows (do NOT cross boundary)
+AUTH --> CORE : authenticated_request
+CORE --> DS1 : store_victim / pop_command
+CORE --> DS2 : session_lookup
+
+note right of SERVERZONE
+  Boundary crossings to defend:
+  - All inbound flows pass through Auth Gateway
+  - Rate limiter throttles /register (5/min/IP)
+  - Failed auth → 401, no data leak
+end note
+
+note top of NET
+  Attacker-controlled:
+  - Victim machine
+  - Chrome process
+  - Network traffic
+end note
+
+note right of SYSTEM
+  Out of scope:
+  - Victim OS exploitation
+  - Browser isolation internals
+  - AWS infrastructure
+end note
+
+@enduml

@@ -1,0 +1,101 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+title CyberRecon — DFD Level 2 (Expand 5.0 "Execute RAT Modules", v3.5)
+
+' =====================
+' External — server-side inputs and outputs
+' =====================
+rectangle "4.0 Decode Commands\n(server-side process)" as DECODER <<external>>
+rectangle "6.0 Exfiltrate Data\n(server-side process)" as EXFIL <<external>>
+
+' =====================
+' TRUST BOUNDARY: Victim Process Space
+' =====================
+rectangle "UNTRUSTED VICTIM PROCESS SPACE" as VS #line:red;line.dashed {
+
+  rectangle "5.0 Execute RAT Modules" as P50 {
+
+    ' Boundary sub-process: dispatch sees the decoded command
+    rectangle "BOUNDARY SUB-PROCESS" as BP #line:red;line.bold {
+      usecase "5.1\nDispatch\nCommand" as P51
+    }
+
+    ' Trusted-within-victim sub-processes
+    rectangle "FEATURE SUB-PROCESSES" as TP {
+      usecase "5.2\nSystem\nRecon" as P52
+      usecase "5.3\nCapture\nScreen / Cam" as P53
+      usecase "5.4\nKeystroke\nCapture" as P54
+      usecase "5.5\nClipboard\nAccess" as P55
+      usecase "5.6\nGPS\nLookup" as P56
+      usecase "5.7\nPersistence\n/ Cleanup" as P57
+    }
+
+    database "Keylogger\nBuffer" as KB
+  }
+}
+
+' =====================
+' Cross-boundary flows
+' =====================
+
+' Command enters from server-side decoder
+DECODER --> P51 : decoded_command\n{cmd, args, id}
+
+' Dispatch routing (all stay inside victim)
+P51 --> P52 : if cmd in {whoami, system_info,\nprocess_list, list_files, shell}
+P51 --> P53 : if cmd in {screenshot, webcam_capture}
+P51 --> P54 : if cmd == keylogger
+P51 --> P55 : if cmd == clipboard_steal
+P51 --> P56 : if cmd == gps_location
+P51 --> P57 : if cmd in {persist, self_destruct}
+
+' Outputs cross boundary back to server
+P52 --> EXFIL : system_output\n(text/JSON)
+P53 --> EXFIL : PNG/JPEG\n(base64)
+P54 --> EXFIL : keystroke_chunk\n(every 15s)
+P55 --> EXFIL : clipboard_text
+P56 --> EXFIL : {lat, lon, source}
+P57 --> EXFIL : ack_status
+
+' Keylogger buffer is internal
+P54 --> KB : write_keystrokes
+KB --> P54 : read_buffer
+
+' =====================
+' Security annotations
+' =====================
+
+note right of P51
+  Boundary sub-process:
+  - Receives decoded command
+  - Routes by cmd name
+  - No command executes here
+end note
+
+note bottom of P52
+  Command blocklist applies here:
+  - shlex.split
+  - shell=False
+  - metachar blocklist (|&;<>`$\n\r)
+  (CWE-78 mitigation)
+end note
+
+note bottom of P57
+  Self-destruct sub-process:
+  - Wipes HKCU Run key
+  - Clears RunMRU / RecentDocs
+  - Deletes payload binary
+  - Notifies server via /self_destruct_notify
+end note
+
+note top of VS
+  This process space is attacker-controlled:
+  - Victim OS may be monitored by EDR
+  - Outputs are untrusted until auth'd server-side
+  - Feature execution is best-effort
+end note
+
+@enduml

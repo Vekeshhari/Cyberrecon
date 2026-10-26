@@ -1,0 +1,159 @@
+@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+title CyberRecon — DFD Level 1 (Top-Level Decomposition)
+
+rectangle "Operator" as OP <<external>>
+rectangle "Victim Host" as VH <<external>>
+rectangle "Chrome\n(headless)" as CH <<external>>
+
+rectangle "CyberRecon System" {
+  usecase "1.0\nAuthenticate\nOperator" as P1
+  usecase "2.0\nManage\nVictims" as P2
+  usecase "3.0\nEncode\nCommands\n(QR)" as P3
+  usecase "4.0\nDecode\nCommands\n(Client)" as P4
+  usecase "5.0\nExecute\nRAT\nModules" as P5
+  usecase "6.0\nExfiltrate\nData" as P6
+  usecase "7.0\nStore &\nServe\nExfil" as P7
+}
+
+database "Victim Store\n(in-memory dict)" as DS1
+database "SAST Reports" as DS2
+
+' Auth flow
+OP --> P1 : operator_token
+P1 --> P2 : authenticated_session
+P1 -.-> OP : 401 Unauthorized\n(if no token)
+
+' Victim registration
+VH --> P2 : registration_data\n(hostname, os, user)
+P2 --> DS1 : create_victim_record\n(id, ip, timestamp)
+P2 -.-> VH : victim_id
+
+' Command queue
+OP --> P3 : command_request\n(screenshot, whoami, ...)
+P3 --> DS1 : append_to_command_queue
+
+' QR channel
+P3 --> CH : QR_PNG\n(base64 JSON)
+CH --> P4 : rendered_pixels
+P4 --> P5 : decoded_command
+DS1 --> P3 : pop_next_command
+
+' RAT modules
+P5 --> P6 : feature_output\n(screenshot, keystrokes,\nGPS, webcam, processes)
+
+' Exfiltration
+P6 --> P7 : HTTP POST /exfil\n(base64 payload)
+P7 --> DS1 : store_by_type\n(screenshots, keystrokes, ...)
+
+' Dashboard reads
+P7 --> OP : victim_list\nexfil_panels\nlive_metrics
+
+' IOC documentation
+P7 -.-> DS2 : (manual) export\ndefensive_iocs
+
+@enduml@startuml
+skinparam monochrome true
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+title CyberRecon — DFD Level 1 (Decomposition with Trust Boundaries, v3.5)
+
+' =====================
+' External entities (untrusted)
+' =====================
+rectangle "Operator\n(untrusted until authed)" as OP <<external>>
+rectangle "Victim Host\n(untrusted until authed)" as VH <<external>>
+rectangle "Chrome\n(headless)" as CH <<external>>
+
+' =====================
+' TRUST BOUNDARY: Server Zone
+' =====================
+rectangle "TRUSTED SERVER ZONE" as SZ #line:red;line.dashed {
+
+  ' --- Boundary processes (auth gateways) ---
+  rectangle "BOUNDARY PROCESSES" as BP #line:red;line.bold {
+    usecase "1.0\nDashboard\nLogin" as P1
+    usecase "2.0\nOperator\nToken Check" as P1b
+    usecase "3.0\nVictim\nKey Check" as P1c
+    usecase "4.0\nRate\nLimiter" as P9
+  }
+
+  ' --- Trusted processes ---
+  rectangle "TRUSTED PROCESSES" as TP {
+    usecase "5.0\nManage\nVictims" as P2
+    usecase "6.0\nEncode\n(AES + QR)" as P3
+    usecase "7.0\nDecode\n(AES + OpenCV)" as P4
+    usecase "8.0\nExecute\nRAT Modules" as P5
+    usecase "9.0\nExfiltrate" as P6
+    usecase "10.0\nStore & Serve\nExfil" as P7
+    usecase "11.0\nSelf-Destruct\n(Wipe)" as P8
+  }
+
+  ' --- Data stores (all inside trust boundary) ---
+  database "Victim Store\n(in-memory dict)" as DS1
+  database "Session Store\n(Flask session)" as DS2
+  database "SAST Reports" as DS3
+}
+
+' =====================
+' Cross-boundary flows (all pass through auth gateways)
+' =====================
+
+' Operator login
+OP --> P1 : password (untrusted input)
+P1 --> DS2 : session_cookie\n(HttpOnly, Secure, SameSite=Lax)
+P1 -.-> OP : login page / 401
+
+' Operator token (after login)
+OP --> P1b : X-Operator-Token
+P1b --> TP : authenticated_request
+P1b -.-> OP : 401 Unauthorized
+
+' Victim key (every victim-side call)
+VH --> P1c : X-Victim-Key / ?vkey=
+P1c --> TP : authenticated_victim
+P1c -.-> VH : 401 Unauthorized
+
+' Rate limiter
+VH --> P9 : registration_request
+P9 --> P2 : if_allowed
+P9 -.-> VH : 429 Too Many Requests
+
+' Victim registration
+P2 --> DS1 : create_victim_record
+P2 -.-> VH : victim_id
+
+' Operator command
+OP --> P3 : command_request
+P3 --> DS1 : append_to_queue
+
+' QR channel (crosses boundary as image)
+P3 --> P3 : AES-256-GCM encrypt
+P3 --> CH : QR_PNG (encrypted)
+CH --> P4 : rendered_pixels (crossing back in)
+P4 --> P4 : AES-256-GCM decrypt
+P4 --> P5 : decoded_command
+DS1 --> P3 : pop_next_command
+
+' RAT execution + exfil
+P5 --> P6 : feature_output
+P6 --> P7 : POST /exfil (X-Victim-Key)
+P7 --> DS1 : store_by_type
+
+' Dashboard reads
+P7 --> OP : victim_list / exfil / metrics
+
+' Self-destruct
+OP --> P8 : self_destruct command
+P8 --> P3 : queue QR command
+P8 --> P7 : POST /self_destruct_notify
+P7 --> DS1 : delete_victim_record
+
+' IOC documentation
+P7 -.-> DS3 : export defensive_iocs
+
+@enduml

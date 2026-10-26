@@ -1,0 +1,32 @@
+# CyberRecon — Core runtime dependencies
+# Reduced from 20+ → 11 by removing unused dev tools from runtime.
+
+# === C2 Server ===
+flask>=2.3.0
+
+# === HTTP Client ===
+requests>=2.34.2
+
+# === Images + QR Encoding ===
+pillow>=12.3.0
+qrcode[pil]>=8.2
+
+# === QR Decoding (client) ===
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# === Browser-based QR fetch (Mandiant QR-C2 technique) ===
+# Selenium renders the QR PNG in real Chrome — this reproduces the
+# "visual pixel channel" that bypasses browser isolation, unlike a
+# plain requests.get(). Also auto-grants camera/media permissions
+# required by isolated-browser environments.
+selenium>=4.15.0
+webdriver-manager>=4.1.2
+
+# === Client-side RAT features ===
+pynput>=1.7.6
+pyperclip>=1.11.0
+psutil>=7.2.2
+
+cryptography>=42.0
+python-dotenv>=1.0

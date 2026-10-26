@@ -1,0 +1,120 @@
+# ============================================================
+# CyberRecon — Docker Compose (Hardened)
+# ============================================================
+# Security hardening:
+#   - read_only root filesystem
+#   - no-new-privileges
+#   - drop ALL Linux capabilities
+#   - tmpfs for writable paths
+#   - resource limits (CPU + memory)
+#   - healthchecks
+#   - localhost-only port binding (opt-in)
+# ============================================================
+
+services:
+  c2-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cyberrecon:local
+    container_name: cyberrecon-c2
+
+    # ---------- Security hardening ----------
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64M
+      - /app/reports:rw,noexec,nosuid,size=64M
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    user: "1000:1000"
+
+    # ---------- Resource limits ----------
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
+    # ---------- Networking ----------
+    ports:
+      - "0.0.0.0:8443:8443"
+
+    # ---------- Environment (v3.5 hardened) ----------
+    # All secrets must be supplied via the host environment or a .env file.
+    # Generate values with:
+    #   python -c "import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"   # CYBERRECON_KEY
+    #   python -c "import secrets; print(secrets.token_urlsafe(32))"                              # OPERATOR_TOKEN, VICTIM_KEY
+    #   python -c "import secrets,string; a=string.ascii_letters+string.digits; print(''.join(secrets.choice(a) for _ in range(24)))"  # DASHBOARD_PASSWORD
+    #   python -c "import secrets; print(secrets.token_urlsafe(48))"                              # SECRET_KEY
+    environment:
+      # Server bind
+      - C2_HOST=0.0.0.0
+      - C2_PORT=8443
+
+      # Operator authentication
+      - CYBERRECON_OPERATOR_TOKEN=${CYBERRECON_OPERATOR_TOKEN:?CYBERRECON_OPERATOR_TOKEN is required}
+      - CYBERRECON_REQUIRE_AUTH=${CYBERRECON_REQUIRE_AUTH:-true}
+
+      # Victim authentication
+      - CYBERRECON_VICTIM_KEY=${CYBERRECON_VICTIM_KEY:?CYBERRECON_VICTIM_KEY is required}
+      - CYBERRECON_REQUIRE_VICTIM_KEY=${CYBERRECON_REQUIRE_VICTIM_KEY:-true}
+
+      # AES-256-GCM QR payload encryption
+      - CYBERRECON_KEY=${CYBERRECON_KEY:?CYBERRECON_KEY is required}
+
+      # Dashboard login + session
+      - CYBERRECON_DASHBOARD_PASSWORD=${CYBERRECON_DASHBOARD_PASSWORD:?CYBERRECON_DASHBOARD_PASSWORD is required}
+      - CYBERRECON_SECRET_KEY=${CYBERRECON_SECRET_KEY:?CYBERRECON_SECRET_KEY is required}
+      - CYBERRECON_SESSION_HOURS=${CYBERRECON_SESSION_HOURS:-8}
+
+      # Filesystem sandbox (empty = default ~/CyberReconSandbox)
+      - CYBERRECON_SANDBOX=${CYBERRECON_SANDBOX:-}
+
+    # ---------- Healthcheck ----------
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8443/check"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+    # ---------- Restart policy ----------
+    restart: unless-stopped
+
+    # ---------- Logging ----------
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------- Optional: AWS Relay ----------
+  # Uncomment to enable domain-fronting proxy on port 443
+  #
+  # relay:
+  #   image: cyberrecon:local
+  #   container_name: cyberrecon-relay
+  #   command: ["python", "aws_relay.py", "--host", "0.0.0.0", "--port", "443", "--c2", "http://c2-server:8443"]
+  #   depends_on:
+  #     c2-server:
+  #       condition: service_healthy
+  #   ports:
+  #     - "127.0.0.1:443:443"
+  #   read_only: true
+  #   tmpfs:
+  #     - /tmp:rw,noexec,nosuid,size=32M
+  #   cap_drop: [ALL]
+  #   security_opt: [no-new-privileges:true]
+  #   user: "1000:1000"
+  #   restart: unless-stopped
+  #   networks:
+  #     - cyberrecon-net
+
+networks:
+  cyberrecon-net:
+    driver: bridge

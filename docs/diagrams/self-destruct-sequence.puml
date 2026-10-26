@@ -1,0 +1,38 @@
+@startuml
+title CyberRecon — Self-Destruct Sequence (v3.5)
+
+actor Operator
+participant "Dashboard" as DB
+participant "C2 Server" as C2
+participant "Victim Client" as VC
+participant "Windows Registry" as REG
+participant "Filesystem" as FS
+
+Operator -> DB : Click Self Destruct
+DB -> C2 : POST /command/<id> (session + operator token)
+C2 -> C2 : Queue command
+C2 --> DB : 200 OK
+
+VC -> C2 : GET /qr/<id> (X-Victim-Key)
+C2 --> VC : QR PNG (AES-encrypted)
+VC -> VC : Decode to dispatch handler
+
+VC -> REG : Delete HKCU Run WindowsSecurityUpdate
+VC -> REG : Delete HKCU Software CyberRecon
+VC -> REG : Clear RunMRU and RecentDocs
+VC -> FS  : Delete temp scripts, chrome profiles, sandbox contents
+VC -> C2  : POST /self_destruct_notify/<id>
+C2 -> C2  : Delete victims_state.json entry
+C2 --> VC : 200 wiped
+
+VC -> FS  : Write temp self-destruct batch
+VC -> FS  : Spawn detached cmd.exe
+VC --> VC : os._exit(0)
+
+note over FS
+  Detached batch waits 3s then:
+   - del /f /q payload.exe
+   - del /f /q batch
+end note
+
+@enduml

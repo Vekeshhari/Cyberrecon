@@ -1,0 +1,43 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = ["venv", "venv_new", ".venv", "build", "dist", "payloads"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "S"]
+ignore = [
+    "S101",   # assert in tests
+    "S603",   # subprocess without shell — we use shell=False explicitly
+    "S607",   # partial executable path — dynamic binaries
+    "E501",   # line length (handled by black)
+    # Following are accepted-risk for this security-research project
+    "S104",   # bind 0.0.0.0 — C2 server by design
+    "S110",   # try/except/pass — stealth modules intentionally swallow
+    "S112",   # try/except/continue — GPS fallback loop
+    "S310",   # urlopen — HTTPS scheme enforced at call sites
+    "E722",   # bare except — legacy stealth code, low-impact
+    "SIM105", # contextlib.suppress — style preference
+    "W291",   # trailing whitespace — cosmetic
+    "W293",   # blank line whitespace — cosmetic
+    "W292",   # missing newline at EOF — cosmetic
+    "N806",   # non-lowercase variable — constants OK
+    "UP006",  # type annotation style — pre-3.9 compat
+    "UP035",  # deprecated import — pre-3.9 compat
+    "UP045",  # Optional type — style preference
+    "F841",   # unused variable — some are intentionally diagnostic
+    "SIM108", # ternary suggestion — readability preference
+    "E741",   # ambiguous variable name `l` — legacy
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S105", "S106"]
+"rat_client.py" = ["S603", "S607", "E402"]
+"modules/stealth.py" = ["E722", "S110"]
+"modules/persistence.py" = ["E722", "S110"]
+"modules/gps.py" = ["S310", "S112"]
+"c2_server.py" = ["S110", "S603", "E402"]
+"aws_relay.py" = ["S104", "E722"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short --cov=. --cov-report=term --cov-report=xml"

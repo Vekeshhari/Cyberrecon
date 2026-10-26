@@ -1,0 +1,26 @@
+# Bandit configuration for CyberRecon
+# Excludes test files, virtual envs, and non-Python dirs.
+
+exclude_dirs:
+  - 'venv'
+  - 'venv-test'
+  - '.venv'
+  - 'tests'
+  - 'reports'
+  - 'payloads'
+  - '.git'
+  - '__pycache__'
+  - 'build'
+  - 'dist'
+
+# Skip rules that are known false positives for this project type.
+skips:
+  # B404: import of subprocess — intentional, part of RAT design
+  - 'B404'
+  # B603: subprocess call without shell — already using shlex.split
+  - 'B603'
+  # B607: partial executable path — commands are dynamic
+  - 'B607'
+
+# Show severity levels: all findings, from LOW up.
+tests: []

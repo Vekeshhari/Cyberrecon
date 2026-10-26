@@ -1,0 +1,59 @@
+# ============================================================
+# Docker build context exclusions
+# ============================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+.github
+
+# Docs (not needed in image)
+docs/
+README.md
+ETHICS.md
+LICENSE
+
+# Tests + reports
+tests/
+reports/
+scripts/
+
+# Payloads (dangerous — never in image)
+payloads/
+
+# IDE / editors
+.vscode/
+.idea/
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+venv/
+venv_new/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Env + secrets
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Docker
+docker-compose.override.yml
+Dockerfile
+.dockerignore
