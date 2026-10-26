@@ -13,7 +13,7 @@ qrcode[pil]>=8.2
 
 # === QR Decoding (client) ===
 opencv-python>=4.8.0
-numpy>=1.24.0
+numpy>=2.5.4
 
 # === Browser-based QR fetch (Mandiant QR-C2 technique) ===
 # Selenium renders the QR PNG in real Chrome — this reproduces the
