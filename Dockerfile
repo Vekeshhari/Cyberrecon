@@ -10,7 +10,7 @@
 # ============================================================
 
 # ---------- Stage 1: builder ----------
-FROM python:3.11-slim AS builder
+FROM python:3.15-slim AS builder
 
 WORKDIR /build
 
@@ -29,7 +29,7 @@ RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # ---------- Stage 2: runtime ----------
-FROM python:3.11-slim AS runtime
+FROM python:3.15-slim AS runtime
 
 # Install runtime-only system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
